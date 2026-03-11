@@ -19,10 +19,14 @@ from .data_models import InstanceState
 from .utils import is_empty_execute_response
 from bfcl_env.multi_turn_utils import execute_multi_turn_func_call
 from bfcl_env.multi_turn_checker import state_checker, response_checker
+from env_tuning.self_play.rewarding import DualOutcomeValidator
 
 
 class ScoreCalculator:
     """计算评分相关逻辑"""
+
+    def __init__(self):
+        self.dual_validator = DualOutcomeValidator()
     
     def calculate_turn_score(self, state: InstanceState, ground_truth_calls: List[Any], entry_id: str) -> float:
         """
@@ -49,17 +53,14 @@ class ScoreCalculator:
             ground_truth_calls, state, entry_id
         )
         
-        # 检查状态一致性和响应一致性
-        if not self._check_state_consistency(state.involved_instances, gt_instances):
-            return 0.0
-        elif not self._check_response_validity(
-            state.all_turn_model_execution_results, 
-            gt_exec_res, 
-            state.current_turn_index
-        ):
-            return 0.0
-        else:
-            return 1.0
+        validation = self.dual_validator.validate(
+            model_instances=state.involved_instances,
+            gt_instances=gt_instances,
+            model_results=state.all_turn_model_execution_results,
+            gt_results=gt_exec_res,
+            turn_index=state.current_turn_index,
+        )
+        return validation.reward
     
     def _execute_ground_truth(self, ground_truth_calls: List[Any], state: InstanceState, entry_id: str) -> tuple:
         """
