@@ -44,22 +44,24 @@ class ScoreCalculator:
         if not state.single_turn_model_response_decode_list or is_empty_execute_response(state.single_turn_model_response_decode_list):
             return 0.0
         
-        # 执行 ground truth
-        gt_exec_res, gt_instances = self._execute_ground_truth(
-            ground_truth_calls, state, entry_id
+        dimensions = self.evaluate_turn_dimensions(state, ground_truth_calls, entry_id)
+        return dimensions["reward"]
+
+    def evaluate_turn_dimensions(self, state: InstanceState, ground_truth_calls: List[Any], entry_id: str) -> Dict[str, float]:
+        """双维度细粒度验证：环境状态维度 × 执行结果维度。"""
+        gt_exec_res, gt_instances = self._execute_ground_truth(ground_truth_calls, state, entry_id)
+        state_ok = self._check_state_consistency(state.involved_instances, gt_instances)
+        response_ok = self._check_response_validity(
+            state.all_turn_model_execution_results,
+            gt_exec_res,
+            state.current_turn_index,
         )
-        
-        # 检查状态一致性和响应一致性
-        if not self._check_state_consistency(state.involved_instances, gt_instances):
-            return 0.0
-        elif not self._check_response_validity(
-            state.all_turn_model_execution_results, 
-            gt_exec_res, 
-            state.current_turn_index
-        ):
-            return 0.0
-        else:
-            return 1.0
+        reward = float(state_ok and response_ok)
+        return {
+            "state_score": float(state_ok),
+            "response_score": float(response_ok),
+            "reward": reward,
+        }
     
     def _execute_ground_truth(self, ground_truth_calls: List[Any], state: InstanceState, entry_id: str) -> tuple:
         """

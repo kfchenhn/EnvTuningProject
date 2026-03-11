@@ -25,6 +25,7 @@
   - [3. Configure Model and Data Paths](#3-configure-model-and-data-paths)
   - [4. Run Training](#4-run-training)
 - [🔧 Customization](#-customization)
+- [🧭 Self-Play extension guide](docs/self_play_env_tuning_implementation.md)
 - [📜 Citation](#-citation)
 - [📞 Contact](#-contact)
 
