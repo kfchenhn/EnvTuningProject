@@ -44,11 +44,18 @@ class ScoreCalculator:
         if not state.single_turn_model_response_decode_list or is_empty_execute_response(state.single_turn_model_response_decode_list):
             return 0.0
         
+        # 统一走双维度验证接口，保证可解释性与后续扩展性。
         dimensions = self.evaluate_turn_dimensions(state, ground_truth_calls, entry_id)
         return dimensions["reward"]
 
     def evaluate_turn_dimensions(self, state: InstanceState, ground_truth_calls: List[Any], entry_id: str) -> Dict[str, float]:
-        """双维度细粒度验证：环境状态维度 × 执行结果维度。"""
+        """双维度细粒度验证：环境状态维度 × 执行结果维度。
+
+        返回字典可直接用于日志与可视化：
+        - state_score: 最终环境状态一致性
+        - response_score: 执行结果信息正确性
+        - reward: 两者乘积（仅同时满足时得 1）
+        """
         gt_exec_res, gt_instances = self._execute_ground_truth(ground_truth_calls, state, entry_id)
         state_ok = self._check_state_consistency(state.involved_instances, gt_instances)
         response_ok = self._check_response_validity(

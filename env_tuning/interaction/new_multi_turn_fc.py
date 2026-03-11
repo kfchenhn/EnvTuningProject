@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import json
+import random
 from typing import Dict, List, Optional, Tuple, Any
 from uuid import uuid4
 
@@ -172,11 +173,15 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
             return self.turn_manager.advance_to_next_turn(state, entry_id)
 
         if execution_result.decoded_responses is not None:
+            # 这里用“步骤级成功信号”而不是最终回合分数：
+            # - 工具执行无错 -> 记为正样本（可作为锚点）
+            # - 工具执行报错 -> 记为负样本
+            step_reward = 1.0 if not execution_result.has_error else 0.0
             self._record_self_play_trajectory(
                 state=state,
                 entry_id=entry_id,
                 decoded_calls=execution_result.decoded_responses,
-                reward_hint=-2.0 if execution_result.has_error else -1.0,
+                reward_hint=step_reward,
             )
 
         # 更新状态
@@ -195,32 +200,41 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         )
 
         if execution_result.has_error:
+            # 通道B只在“有错误”时触发，并按课程阶段做概率退火。
             self.dual_channel_state = self.dual_channel_scheduler.step(self.dual_channel_state)
-            if self.dual_channel_state.channel_b_hint_prob > 0:
-                user_hint = "[Channel-B Hint] Please inspect missing dependencies/parameters before retry.\n" + user_hint
+            if random.random() < self.dual_channel_state.channel_b_hint_prob:
+                user_hint = "[Channel-B Hint] 请优先检查依赖工具是否先调用、参数是否缺失或类型错误。\n" + user_hint
 
         return False, user_hint, score, {}
 
 
     def _record_self_play_trajectory(self, state: InstanceState, entry_id: str, decoded_calls: List[Any], reward_hint: float) -> None:
+        """记录自博弈轨迹，并在失败时构建反事实样本。
+
+        参数说明：
+        - reward_hint: 步骤级奖励信号（1=该步执行成功，0=该步执行失败）
+        """
         task_signature = f"{entry_id}::turn{state.current_turn_index}"
         trajectory = Trajectory(
             task_signature=task_signature,
             turn_index=state.current_turn_index,
             calls=self.ast_diagnostics.normalize_calls(decoded_calls),
             reward=reward_hint,
+            metadata={"attempt": state.current_turn_attempt_counts},
         )
 
-        if reward_hint >= -1.0:
+        # 成功步骤轨迹进入回放池，可作为后续失败样本的锚点。
+        if reward_hint > 0:
             self.replay_buffer.add(trajectory)
             state.latest_anchor_trajectory = trajectory
             return
 
+        # 失败步骤：尝试检索锚点并做 AST 分歧诊断。
         state.latest_failed_trajectory = trajectory
         anchor = self.anchor_selector.select(
             failed_trajectory=trajectory,
             batch_candidates=[state.latest_anchor_trajectory] if state.latest_anchor_trajectory else [],
-            curriculum_anchor=self.replay_buffer.latest_success(task_signature),
+            curriculum_anchor=None,
         )
         if anchor is None:
             return
