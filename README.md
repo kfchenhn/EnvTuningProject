@@ -180,8 +180,22 @@ bash scripts/run_multi_turn_fc_grpo_stage2.sh
 
 # Stage 3 training (complete data training)
 bash scripts/run_multi_turn_fc_grpo_stage3.sh
+
+# Stage 4 training (robustness and no-hint stress training)
+bash scripts/run_multi_turn_fc_grpo_stage4.sh
 ```
 
+
+
+### Self-play extension scaffold
+
+We provide a lightweight self-play extension scaffold to help migrate from Environment Tuning to a self-play enhanced pipeline:
+
+- `env_tuning/self_play/validators.py`: dual-outcome validator (state + response).
+- `env_tuning/self_play/anchor_selector.py`: 3-level anchor selection waterfall.
+- `env_tuning/self_play/ast_diagnostics.py`: AST-style normalization and first-divergence diagnosis.
+- `env_tuning/self_play/pipeline.py`: coordinator for counterfactual sample construction.
+- `docs/self_play_env_tuning_implementation_guide.md`: step-by-step implementation plan in Chinese.
 
 ## 🔧 Customization
 

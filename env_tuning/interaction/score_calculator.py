@@ -18,11 +18,14 @@ from typing import Dict, List, Any
 from .data_models import InstanceState
 from .utils import is_empty_execute_response
 from bfcl_env.multi_turn_utils import execute_multi_turn_func_call
-from bfcl_env.multi_turn_checker import state_checker, response_checker
+from env_tuning.self_play.validators import DualOutcomeValidator
 
 
 class ScoreCalculator:
     """计算评分相关逻辑"""
+
+    def __init__(self):
+        self.validator = DualOutcomeValidator()
     
     def calculate_turn_score(self, state: InstanceState, ground_truth_calls: List[Any], entry_id: str) -> float:
         """
@@ -49,17 +52,14 @@ class ScoreCalculator:
             ground_truth_calls, state, entry_id
         )
         
-        # 检查状态一致性和响应一致性
-        if not self._check_state_consistency(state.involved_instances, gt_instances):
-            return 0.0
-        elif not self._check_response_validity(
-            state.all_turn_model_execution_results, 
-            gt_exec_res, 
-            state.current_turn_index
-        ):
-            return 0.0
-        else:
-            return 1.0
+        validation = self.validator.validate(
+            model_instances=state.involved_instances,
+            gt_instances=gt_instances,
+            model_results=state.all_turn_model_execution_results,
+            gt_results=gt_exec_res,
+            turn_index=state.current_turn_index,
+        )
+        return float(validation.binary_reward)
     
     def _execute_ground_truth(self, ground_truth_calls: List[Any], state: InstanceState, entry_id: str) -> tuple:
         """
@@ -83,42 +83,7 @@ class ScoreCalculator:
             is_evaL_run=True,
         )
     
-    def _check_state_consistency(self, model_instances: Dict[str, Any], gt_instances: Dict[str, Any]) -> bool:
-        """
-        检查状态一致性
-        
-        Args:
-            model_instances: 模型实例字典
-            gt_instances: 标准答案实例字典
-            
-        Returns:
-            bool: 是否一致
-        """
-        try:
-            result = state_checker(model_instances, gt_instances)
-            return result.get("valid", False)
-        except Exception as e:
-            print(f"State consistency check failed: {e}")
-            return False
     
-    def _check_response_validity(self, model_results: List[Any], gt_results: List[Any], turn_index: int) -> bool:
-        """
-        检查响应有效性
-        
-        Args:
-            model_results: 模型结果列表
-            gt_results: 标准答案结果列表
-            turn_index: 轮次索引
-            
-        Returns:
-            bool: 是否有效
-        """
-        try:
-            result = response_checker(model_results, gt_results, turn_index)
-            return result.get("valid", False)
-        except Exception as e:
-            print(f"Response validity check failed: {e}")
-            return False
     
     def calculate_overall_score(self, all_turn_scores: List[float]) -> float:
         """
