@@ -25,3 +25,26 @@ def test_anchor_selector_priority():
     anchor, source = selector.choose_anchor("task_b", [peer_fail])
     assert source == "history"
     assert anchor is hist_ok
+
+
+def test_ast_parallel_group_order_invariant():
+    diag = ASTTrajectoryDiagnostic()
+    success = (
+        '[{"name":"get_hotel","arguments":{"city":"shanghai"},"parallel_group":"g1"},'
+        '{"name":"get_flight","arguments":{"from":"beijing","to":"shanghai"},"parallel_group":"g1"}]'
+    )
+    failed = (
+        '[{"name":"get_flight","arguments":{"from":"beijing","to":"shanghai"},"parallel_group":"g1"},'
+        '{"name":"get_hotel","arguments":{"city":"shanghai"},"parallel_group":"g1"}]'
+    )
+    report = diag.build_counterfactual_report(success, failed)
+    assert report["has_divergence"] is False
+
+
+def test_ast_dependency_divergence_detected():
+    diag = ASTTrajectoryDiagnostic()
+    success = '[{"name":"submit_order","arguments":{"id":1},"depends_on":["query_inventory"]}]'
+    failed = '[{"name":"submit_order","arguments":{"id":1},"depends_on":[]}]'
+    report = diag.build_counterfactual_report(success, failed)
+    assert report["has_divergence"] is True
+    assert report["divergence_type"] == "dependency"
