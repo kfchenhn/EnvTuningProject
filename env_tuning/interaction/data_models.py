@@ -16,6 +16,8 @@
 
 from dataclasses import dataclass, asdict, field
 from typing import Dict, List, Optional, Any
+
+from env_tuning.self_play.data_models import CounterfactualSample, Trajectory
 from enum import Enum
 
 
@@ -64,6 +66,11 @@ class InstanceState:
     all_turn_model_execution_results: List[Any] = field(default_factory=list)
     single_turn_model_execution_results: List[Any] = field(default_factory=list)
     single_turn_model_response_decode_list: List[Any] = field(default_factory=list)
+    # 自博弈反事实样本缓存（供离线优化/分析使用）。
+    self_play_counterfactuals: List[CounterfactualSample] = field(default_factory=list)
+    # 最近一次失败/成功轨迹（用于在线诊断和锚点选择）。
+    latest_failed_trajectory: Optional[Trajectory] = None
+    latest_anchor_trajectory: Optional[Trajectory] = None
 
     def reset_single_turn_buffers(self) -> None:
         """在进入下一轮对话时调用，清空本轮缓存。"""

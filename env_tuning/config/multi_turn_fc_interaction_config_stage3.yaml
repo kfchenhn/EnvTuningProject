@@ -6,5 +6,5 @@ interaction:
       self_play_replay_size: 256
       channel_b_decay_rate: 0.95
       channel_b_min_prob: 0.05
+      # 阶段三：自博弈 + 提示退火
       # Configuration will be read from dataset interaction_kwargs
-      # No default config needed for BFCLV3 format

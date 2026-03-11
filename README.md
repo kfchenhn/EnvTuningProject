@@ -25,6 +25,7 @@
   - [3. Configure Model and Data Paths](#3-configure-model-and-data-paths)
   - [4. Run Training](#4-run-training)
 - [🔧 Customization](#-customization)
+- [🧭 Self-Play extension guide](docs/self_play_env_tuning_implementation.md)
 - [📜 Citation](#-citation)
 - [📞 Contact](#-contact)
 
@@ -178,8 +179,11 @@ bash scripts/run_multi_turn_fc_grpo_stage1.sh
 # Stage 2 training (basic capability training)
 bash scripts/run_multi_turn_fc_grpo_stage2.sh
 
-# Stage 3 training (complete data training)
+# Stage 3 training (self-play and logic internalization)
 bash scripts/run_multi_turn_fc_grpo_stage3.sh
+
+# Stage 4 training (robustness training, no env hints)
+bash scripts/run_multi_turn_fc_grpo_stage4.sh
 ```
 
 
@@ -192,7 +196,7 @@ Edit YAML configuration files in the `env_tuning/config/` directory to adjust tr
 Modify `env_tuning/format_reward.py` or `env_tuning/bfcl_reward.py` to implement custom reward calculation logic.
 
 ### Adjust Multi-turn Interaction
-Edit `env_tuning/config/multi_turn_fc_interaction_config.yaml` to configure multi-turn interaction parameters.
+Edit stage-specific files `env_tuning/config/multi_turn_fc_interaction_config_stage{1,2,3,4}.yaml` (or the default `multi_turn_fc_interaction_config.yaml`) to configure multi-turn interaction parameters.
 
 
 ## 📜 Citation
