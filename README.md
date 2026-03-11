@@ -180,6 +180,9 @@ bash scripts/run_multi_turn_fc_grpo_stage2.sh
 
 # Stage 3 training (complete data training)
 bash scripts/run_multi_turn_fc_grpo_stage3.sh
+
+# Stage 4 training (robustness / OOD hardening)
+bash scripts/run_multi_turn_fc_grpo_stage4.sh
 ```
 
 

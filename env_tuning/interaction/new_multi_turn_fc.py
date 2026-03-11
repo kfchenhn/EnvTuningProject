@@ -25,6 +25,8 @@ from .execution_manager import ExecutionManager
 from .score_calculator import ScoreCalculator
 from .turn_manager import TurnManager
 from bfcl_env.multi_turn_utils import execute_multi_turn_func_call
+from env_tuning.self_play.anchor_selector import AnchorSelector, TrajectoryRecord
+from env_tuning.self_play.ast_diagnostics import ASTTrajectoryDiagnostic
 
 
 class MultiTurnFunctionCallInteraction(BaseInteraction):
@@ -41,6 +43,8 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         self.execution_manager = ExecutionManager()
         self.score_calculator = ScoreCalculator()
         self.turn_manager = TurnManager(self.score_calculator)
+        self.anchor_selector = AnchorSelector()
+        self.ast_diagnostic = ASTTrajectoryDiagnostic()
 
     async def start_interaction(self, instance_id: Optional[str] = None, **kwargs) -> str:
         """创建工具实例"""
@@ -116,7 +120,7 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         state.current_turn_attempt_counts += 1
         
         if self.turn_manager.should_force_quit(state, self.max_step_limit):
-            should_term, content, score, extra = self.turn_manager.advance_to_next_turn(state, entry_id)
+            should_term, content, score, extra = self._advance_turn_with_self_play(state, entry_id)
             if should_term:
                 await self.finalize_interaction(instance_id=entry_id)
             
@@ -135,7 +139,7 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         
         # 处理无ground truth的轮次
         if not ground_truth_calls:
-            should_term, content, base_score, extra = self.turn_manager.advance_to_next_turn(state, entry_id)
+            should_term, content, base_score, extra = self._advance_turn_with_self_play(state, entry_id)
             assert base_score == -1.0, "Ground truth call list is empty, returned score should be -1.0"
             if response_data.response_type == ResponseType.ANSWER:
                 return should_term, content, 1.0, extra
@@ -152,7 +156,7 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
     def _determine_next_action(self, execution_result: ExecutionResult, state: InstanceState, entry_id: str) -> Tuple[bool, str, float, Dict[str, Any]]:
         """决定下一步行动"""
         if not execution_result.should_continue:
-            return self.turn_manager.advance_to_next_turn(state, entry_id)
+            return self._advance_turn_with_self_play(state, entry_id)
         
         # 更新状态
         state.involved_instances = execution_result.new_instances
@@ -161,7 +165,7 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         
         # 检查是否需要强制退出
         if self.turn_manager.should_force_quit(state, self.max_step_limit):
-            return self.turn_manager.advance_to_next_turn(state, entry_id)
+            return self._advance_turn_with_self_play(state, entry_id)
         
         # 准备继续执行的响应
         user_hint, score = self.execution_manager.format_execution_response(
@@ -170,6 +174,34 @@ class MultiTurnFunctionCallInteraction(BaseInteraction):
         )
         
         return False, user_hint, score, {}
+
+    def _advance_turn_with_self_play(self, state: InstanceState, entry_id: str):
+        should_term, content, score, extra = self.turn_manager.advance_to_next_turn(state, entry_id)
+
+        task_signature = entry_id
+        latest_calls = state.single_turn_model_response_decode_list[-1] if state.single_turn_model_response_decode_list else []
+        trajectory_text = json.dumps(latest_calls, ensure_ascii=False)
+        record = TrajectoryRecord(
+            task_signature=task_signature,
+            trajectory_text=trajectory_text,
+            progress_reward=max(float(score), 0.0),
+            success=bool(score > 0),
+        )
+
+        if record.success:
+            self.anchor_selector.add_history(record)
+        else:
+            anchor, source = self.anchor_selector.choose_anchor(task_signature, peer_records=[])
+            if anchor is not None:
+                report = self.ast_diagnostic.build_counterfactual_report(
+                    success_text=anchor.trajectory_text,
+                    failed_text=record.trajectory_text,
+                )
+                extra = dict(extra)
+                extra["self_play_anchor_source"] = source
+                extra["self_play_report"] = report
+
+        return should_term, content, score, extra
 
     async def calculate_score(self) -> float:
         """计算交互评分"""
