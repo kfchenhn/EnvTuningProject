@@ -2,5 +2,16 @@ interaction:
   - class_name: "env_tuning.interaction.new_multi_turn_fc.MultiTurnFunctionCallInteraction"
     config:
       name: "multi_turn_tool_call"
+      # ######新增（开始）######
+      enable_blind_rollout_feedback: true
+      enable_temporal_compat: true
+      max_step_limit: 5
+      # Step-9: persistent shared historical anchor pool options.
+      # backend: auto | file | redis
+      anchor_store_backend: "auto"
+      anchor_store_file_path: "/tmp/env_tuning_self_play_anchor_store.jsonl"
+      anchor_store_redis_url: ""
+      anchor_store_redis_prefix: "env_tuning:self_play_anchor"
+      # #######新增（结束）######
       # Configuration will be read from dataset interaction_kwargs
-      # No default config needed for BFCLV3 format 
+      # No default config needed for BFCLV3 format
