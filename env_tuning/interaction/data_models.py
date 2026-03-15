@@ -21,6 +21,7 @@ from enum import Enum
 
 class ResponseType(Enum):
     """响应类型枚举"""
+
     ANSWER = "answer"
     TOOL_CALL = "tool_call"
     PARSE_ERROR = "parse_error"
@@ -29,6 +30,7 @@ class ResponseType(Enum):
 @dataclass
 class ResponseData:
     """解析后的响应数据"""
+
     content: str
     response_type: ResponseType
     is_valid: bool
@@ -39,6 +41,7 @@ class ResponseData:
 @dataclass
 class ExecutionResult:
     """执行结果数据"""
+
     execution_results: List[Any]
     new_instances: Dict[str, Any]
     has_error: bool
@@ -46,15 +49,29 @@ class ExecutionResult:
     decoded_responses: Optional[List[Any]] = None
 
 
+# ######新增（开始）######
+@dataclass
+class TurnAttemptRecord:
+    """单轮中一次工具调用尝试的轨迹记录。"""
+
+    decoded_calls: List[str]
+    execution_results: List[Any]
+    has_error: bool
+
+
+# #######新增（结束）######
+
+
 @dataclass
 class InstanceState:
     """实例状态数据"""
+
     initial_config: Dict[str, Any]
     involved_classes: List[str]
     ground_truth: List[Any]
     processed_question: List[str]
     question: List[str]
-    
+
     involved_instances: Dict[str, Any]
     total_turns: int
 
@@ -65,14 +82,22 @@ class InstanceState:
     single_turn_model_execution_results: List[Any] = field(default_factory=list)
     single_turn_model_response_decode_list: List[Any] = field(default_factory=list)
 
+    # ######新增（开始）######
+    # 用于后见诊断：保存当前 turn 内每次工具尝试轨迹。
+    single_turn_attempt_records: List[TurnAttemptRecord] = field(default_factory=list)
+    # #######新增（结束）######
+
     def reset_single_turn_buffers(self) -> None:
         """在进入下一轮对话时调用，清空本轮缓存。"""
+
         self.single_turn_model_execution_results.clear()
         self.single_turn_model_response_decode_list.clear()
         self.current_turn_attempt_counts = 0
+        self.single_turn_attempt_records.clear()
 
     def add_exec_results(self, results: List[Any]) -> None:
         """本轮执行完，把结果加入缓存。"""
+
         self.single_turn_model_execution_results.extend(results)
 
     def flush_exec_results_to_all(self) -> None:
@@ -80,6 +105,7 @@ class InstanceState:
         把单轮执行结果累加到整体结果，然后清空本轮缓存。
         在进入下一轮、或对当前轮做评测时调用。
         """
+
         self.all_turn_model_execution_results.extend(self.single_turn_model_execution_results)
         self.single_turn_model_execution_results.clear()
 

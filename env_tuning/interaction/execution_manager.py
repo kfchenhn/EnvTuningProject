@@ -16,51 +16,34 @@
 
 import json
 from typing import List, Any, Tuple
-from .data_models import InstanceState, ExecutionResult
-from .utils import (
-    parse_tool_calls,
-    default_decode_execute_prompting,
-    is_empty_execute_response,
-    has_execution_error
-)
+
+# ######新增（开始）######
+from .data_models import InstanceState, ExecutionResult, TurnAttemptRecord
+# #######新增（结束）######
+from .utils import parse_tool_calls, default_decode_execute_prompting, is_empty_execute_response, has_execution_error
 from bfcl_env.multi_turn_utils import execute_multi_turn_func_call
 
 
 class ExecutionManager:
     """管理函数执行相关逻辑"""
-    
+
     def execute_function_calls(self, tool_content: str, state: InstanceState, instance_id: str, entry_id: str) -> ExecutionResult:
-        """
-        执行函数调用
-        
-        Args:
-            tool_content: 工具调用内容
-            state: 实例状态
-            instance_id: 实例ID
-            entry_id: 条目ID
-            
-        Returns:
-            ExecutionResult: 执行结果
-        """
+        """执行函数调用。"""
         try:
-            # 解码工具调用
             model_responses = parse_tool_calls(tool_content)
             decoded_responses = default_decode_execute_prompting(model_responses)
-            
-            # 检查是否为空响应
+
             if is_empty_execute_response(decoded_responses):
                 return ExecutionResult(
                     execution_results=[],
                     new_instances=state.involved_instances,
                     has_error=False,
                     should_continue=False,
-                    decoded_responses=decoded_responses
+                    decoded_responses=decoded_responses,
                 )
-            
-            # 添加到响应列表
+
             state.single_turn_model_response_decode_list.append(decoded_responses)
-            
-            # 执行函数调用
+
             execution_results, new_instances = execute_multi_turn_func_call(
                 decoded_responses,
                 state.initial_config,
@@ -70,74 +53,69 @@ class ExecutionManager:
                 long_context=("long_context" in entry_id or "composite" in entry_id),
                 is_evaL_run=False,
             )
-            
-            # 检查执行错误
+
             has_error = has_execution_error(execution_results)
-            
+
+            # ######新增（开始）######
+            # 记录每次尝试，供 turn 结束后的后见锚点选择/AST 诊断使用。
+            state.single_turn_attempt_records.append(
+                TurnAttemptRecord(
+                    decoded_calls=decoded_responses,
+                    execution_results=execution_results,
+                    has_error=has_error,
+                )
+            )
+            # #######新增（结束）######
+
             return ExecutionResult(
                 execution_results=execution_results,
                 new_instances=new_instances,
                 has_error=has_error,
                 should_continue=True,
-                decoded_responses=decoded_responses
+                decoded_responses=decoded_responses,
             )
-            
-        except Exception as e:
+
+        except Exception:
             return ExecutionResult(
                 execution_results=[],
                 new_instances=state.involved_instances,
                 has_error=True,
                 should_continue=False,
-                decoded_responses=None
+                decoded_responses=None,
             )
-    
-    def format_execution_response(self, execution_results: List[Any], has_error: bool) -> Tuple[str, float]:
-        """
-        格式化执行结果响应
-        
-        Args:
-            execution_results: 执行结果列表
-            has_error: 是否有错误
-            
-        Returns:
-            Tuple[str, float]: (用户提示, 评分)
-        """
+
+    def format_execution_response(self, execution_results: List[Any], has_error: bool, blind_mode: bool = False) -> Tuple[str, float]:
+        """格式化执行结果响应。"""
         response_content = json.dumps(execution_results, ensure_ascii=False)
         score = -2.0 if has_error else -1.0
-        user_hint = (
-            f"Here are the function's execution results. Execution results:{response_content}\n "
-            f"If you believe you have already fulfilled the user's request, please first outline "
-            f"your thought process in a <think></think>pair, and then give a brief summary of the "
-            f"result in an <answer></answer> pair. Otherwise, you should continue to call until "
-            f"fulfilling user's request."
-        )
+
+        # ######新增（开始）######
+        # blind_mode=True 时仅返回盲盒反馈，不提供可操作增强提示。
+        if blind_mode:
+            user_hint = (
+                f"Execution results:{response_content}\n"
+                f"Continue reasoning in blind-box mode. If finished, return <answer></answer>; "
+                f"otherwise continue with <tool_call></tool_call>."
+            )
+        else:
+            user_hint = (
+                f"Here are the function's execution results. Execution results:{response_content}\n "
+                f"If you believe you have already fulfilled the user's request, please first outline "
+                f"your thought process in a <think></think>pair, and then give a brief summary of the "
+                f"result in an <answer></answer> pair. Otherwise, you should continue to call until "
+                f"fulfilling user's request."
+            )
+        # #######新增（结束）######
         return user_hint, score
-    
+
     def decode_tool_calls(self, tool_content: str) -> List[Any]:
-        """
-        解码工具调用
-        
-        Args:
-            tool_content: 工具调用内容
-            
-        Returns:
-            List[Any]: 解码后的响应列表
-        """
+        """解码工具调用。"""
         try:
             model_responses = parse_tool_calls(tool_content)
             return default_decode_execute_prompting(model_responses)
         except Exception:
             return []
-    
+
     def check_execution_limits(self, state: InstanceState, max_limit: int) -> bool:
-        """
-        检查执行次数限制
-        
-        Args:
-            state: 实例状态
-            max_limit: 最大限制次数
-            
-        Returns:
-            bool: 是否超过限制
-        """
+        """检查执行次数限制。"""
         return state.current_turn_attempt_counts > max_limit
