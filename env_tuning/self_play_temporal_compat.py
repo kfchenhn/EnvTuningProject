@@ -14,11 +14,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ASTNode:
-    """抽象语法树中的简化节点：只保留工具类别、参数类型与依赖拓扑。"""
+    """抽象语法树中的完整节点：保留函数名、参数值与依赖信息。"""
 
+    tool_name: str
     tool_category: str
-    param_schema: tuple[str, ...]
-    depends_on_previous: bool
+    arguments: Any
+    normalized_arguments: str
+    tool_call_id: str
+    dependent_tool_call_ids: tuple[str, ...]
 
 
 @dataclass
@@ -51,11 +54,15 @@ class ASTLogicalDiagnoser:
             for tool_call in msg.tool_calls:
                 tool_name = getattr(tool_call.function, "name", "") or "unknown"
                 args = self._safe_json_load(getattr(tool_call.function, "arguments", "{}"))
+                dependent_ids = self._dependent_tool_call_ids(args, observed_tool_markers)
                 nodes.append(
                     ASTNode(
+                        tool_name=tool_name,
                         tool_category=self._tool_category(tool_name),
-                        param_schema=self._param_schema(args),
-                        depends_on_previous=self._depends_on_previous(args, observed_tool_markers),
+                        arguments=args,
+                        normalized_arguments=self._normalize_arguments(args),
+                        tool_call_id=str(getattr(tool_call, "id", "") or ""),
+                        dependent_tool_call_ids=dependent_ids,
                     )
                 )
                 observed_tool_markers.append(str(getattr(tool_call, "id", "")))
@@ -81,7 +88,7 @@ class ASTLogicalDiagnoser:
     def _divergence_type(self, failed_ast: Sequence[ASTNode], anchor_ast: Sequence[ASTNode], idx: int) -> str:
         if idx >= len(failed_ast) or idx >= len(anchor_ast):
             return "Strategy Divergence"
-        if failed_ast[idx].tool_category != anchor_ast[idx].tool_category:
+        if failed_ast[idx].tool_name != anchor_ast[idx].tool_name or failed_ast[idx].tool_category != anchor_ast[idx].tool_category:
             return "Strategy Divergence"
         return "Parameter Divergence"
 
@@ -93,7 +100,7 @@ class ASTLogicalDiagnoser:
             )
         return (
             f"在第 {turn_no} 步出现【参数分歧】：动作类别正确但参数语义/类型不匹配。"
-            "请检查实体标识符、数据类型与前序返回值引用关系。"
+            "请检查函数参数取值、实体标识符、数据类型与前序返回值引用关系。"
         )
 
     def _tool_category(self, tool_name: str) -> str:
@@ -101,16 +108,18 @@ class ASTLogicalDiagnoser:
         retrieve_markers = ["get", "search", "query", "list", "fetch", "read"]
         return "信息检索类" if any(k in lower for k in retrieve_markers) else "状态修改类"
 
-    def _param_schema(self, args: Any) -> tuple[str, ...]:
-        if isinstance(args, dict):
-            return tuple(sorted(f"{k}:{type(v).__name__}" for k, v in args.items()))
-        return (type(args).__name__,)
+    def _normalize_arguments(self, args: Any) -> str:
+        """稳定化参数序列化，便于跨轨迹逐节点比对。"""
+        try:
+            return json.dumps(args, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            return str(args)
 
-    def _depends_on_previous(self, args: Any, markers: Sequence[str]) -> bool:
+    def _dependent_tool_call_ids(self, args: Any, markers: Sequence[str]) -> tuple[str, ...]:
         if not isinstance(args, dict):
-            return False
+            return ()
         serialized = json.dumps(args, ensure_ascii=False)
-        return any(marker and marker in serialized for marker in markers)
+        return tuple(marker for marker in markers if marker and marker in serialized)
 
     def _safe_json_load(self, raw: Any) -> Any:
         if isinstance(raw, dict):
@@ -120,7 +129,7 @@ class ASTLogicalDiagnoser:
         try:
             return json.loads(raw)
         except Exception:
-            return {}
+            return {"__raw_arguments__": str(raw)}
 
 
 class SelfPlayAnchorSelector:
@@ -184,7 +193,15 @@ class SelfPlayAnchorSelector:
             if msg.role == "user":
                 user_seed = str(msg.content)
                 break
-        tools = sorted(req.tools_kwargs.keys())
+        tools_from_schema = []
+        if getattr(req, "tool_schemas", None):
+            for tool_schema in req.tool_schemas:
+                func = getattr(tool_schema, "function", None)
+                name = getattr(func, "name", "") if func is not None else ""
+                if name:
+                    tools_from_schema.append(name)
+        tools_from_kwargs = sorted((getattr(req, "tools_kwargs", {}) or {}).keys())
+        tools = sorted(set(tools_from_schema) | set(tools_from_kwargs))
         return f"{user_seed}||{'|'.join(tools)}"
 
 

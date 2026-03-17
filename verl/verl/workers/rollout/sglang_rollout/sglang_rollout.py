@@ -1005,13 +1005,19 @@ class SGLangRollout(BaseRollout):
                     prompts,
                     n=1 if is_validate else self.config.n,
                 )
-                retry_req_list = self._temporal_compat_orchestrator.inject_hints_into_base_requests(retry_req_list, retry_hints)
-                retry_output_req_list = loop.run_until_complete(
-                    asyncio.gather(
-                        *[self._async_rollout_a_request(req, do_sample, is_validate, **kwargs) for req in retry_req_list],
+                if retry_req_list and not all(req.use_inference_chat_template for req in retry_req_list):
+                    logger.warning(
+                        "Skip temporal compatibility retry because some requests disable inference chat template; "
+                        "appended hint messages would not be reflected into input_ids."
                     )
-                )
-                sorted_output_req_list = sorted(retry_output_req_list, key=lambda x: (x.batch_data_id, x.rollout_offset))
+                else:
+                    retry_req_list = self._temporal_compat_orchestrator.inject_hints_into_base_requests(retry_req_list, retry_hints)
+                    retry_output_req_list = loop.run_until_complete(
+                        asyncio.gather(
+                            *[self._async_rollout_a_request(req, do_sample, is_validate, **kwargs) for req in retry_req_list],
+                        )
+                    )
+                    sorted_output_req_list = sorted(retry_output_req_list, key=lambda x: (x.batch_data_id, x.rollout_offset))
             #######新增（结束）#######
         else:
             sorted_output_req_list = None
