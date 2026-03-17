@@ -72,6 +72,10 @@ from verl.workers.rollout.schemas import (
 )
 from verl.workers.rollout.sglang_rollout.utils import broadcast_pyobj
 
+#######新增（开始）#######
+from env_tuning.self_play_temporal_compat import TemporalCompatibilityOrchestrator
+#######新增（结束）#######
+
 try:
     from sglang.srt.function_call.function_call_parser import FunctionCallParser
 except ImportError:
@@ -273,6 +277,11 @@ class SGLangRollout(BaseRollout):
         """
         super().__init__()
         self.config = config
+
+        #######新增（开始）#######
+        # 自博弈时序兼容代理：用于批次后锚点选择、AST 分歧诊断与二次重生成提示注入。
+        self._temporal_compat_orchestrator = TemporalCompatibilityOrchestrator()
+        #######新增（结束）#######
         self._device_mesh_cpu = device_mesh
         os.environ.setdefault("SGL_DISABLE_TP_MEMORY_INBALANCE_CHECK", "true")
 
@@ -985,7 +994,25 @@ class SGLangRollout(BaseRollout):
                 )
             )
             sorted_output_req_list = sorted(output_req_list, key=lambda x: (x.batch_data_id, x.rollout_offset))
-            # 在这里，我想根据输出的完整轨迹进行正确锚点选择和分歧提示注入，然后再重新生成一次。根据同一个batch_data_id的不同rollout_offset中正确的和错误的轨迹，找到它们的第一分歧点，然后将这个分歧点作为错误轨迹的提示，让错误轨迹重新生成。这样可以让模型在生成过程中更早地意识到错误，并且有机会纠正它，从而提高整体的生成质量和准确性。
+            #######新增（开始）#######
+            # 最小侵入式时序兼容架构：
+            # 1) 先运行一次完整 rollout（静默收集）；
+            # 2) 按 batch_data_id 进行锚点选择与 AST 后见诊断；
+            # 3) 将掩码分歧提示注入到失败轨迹后，再做一次重生成。
+            retry_hints = self._temporal_compat_orchestrator.build_retry_plan(req_list, sorted_output_req_list)
+            if retry_hints:
+                retry_req_list = self._preprocess_prompt_to_async_rollout_requests(
+                    prompts,
+                    n=1 if is_validate else self.config.n,
+                )
+                retry_req_list = self._temporal_compat_orchestrator.inject_hints_into_base_requests(retry_req_list, retry_hints)
+                retry_output_req_list = loop.run_until_complete(
+                    asyncio.gather(
+                        *[self._async_rollout_a_request(req, do_sample, is_validate, **kwargs) for req in retry_req_list],
+                    )
+                )
+                sorted_output_req_list = sorted(retry_output_req_list, key=lambda x: (x.batch_data_id, x.rollout_offset))
+            #######新增（结束）#######
         else:
             sorted_output_req_list = None
         
