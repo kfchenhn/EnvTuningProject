@@ -1,0 +1,28 @@
+2026-03-13 21:02:14,475	INFO worker.py:1879 -- Started a local Ray instance. View the dashboard at [1m[32m127.0.0.1:8265 [39m[22m
+[33m(raylet)[0m [2026-03-13 21:02:44,891 E 2065438 2065438] (raylet) runtime_env_agent_client.cc:336: Runtime Env Agent timed out in 30000ms. Status: NotFound: on_connect Connection refused, address: 172.29.7.38, port: 50684, existing immediately...
+[33m(raylet)[0m [2026-03-13 21:02:44,892 E 2065438 2065438] (raylet) runtime_env_agent_client.cc:292: The raylet exited immediately because the runtime env agent timed out when Raylet try to connect to it. This can happen because the runtime env agent was never started, or is listening to the wrong port. Read the log `cat /tmp/ray/session_latest/logs/runtime_env_agent.log`. You can find the log file structure here https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#logging-directory-structure.
+[33m(raylet)[0m 
+[33m(raylet)[0m The node with node id: bcb93d49bfe897e9d1dc2c834e2ed682476288310334b3355159ecc9 and address: 172.29.7.38 and node name: 172.29.7.38 has been marked dead because the detector has missed too many heartbeats from it. This can happen when a 	(1) raylet crashes unexpectedly (OOM, etc.) 
+	(2) raylet has lagging heartbeats due to slow network or busy workload.
+Error executing job with overrides: ['algorithm.adv_estimator=grpo', 'data.train_batch_size=4', 'data.filter_overlong_prompts=False', 'data.truncation=error', 'data.return_raw_chat=True', 'data.train_files=/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/data/bfcl_train_base.parquet', 'data.val_files=/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/data/bfcl_val.parquet', 'actor_rollout_ref.model.path=/mnt/whuscs/ckf/models/Qwen3-0.6B', 'actor_rollout_ref.model.use_remove_padding=True', 'actor_rollout_ref.model.enable_gradient_checkpointing=True', 'actor_rollout_ref.model.use_fused_kernels=True', 'actor_rollout_ref.actor.entropy_checkpointing=True', 'actor_rollout_ref.actor.ppo_mini_batch_size=4', 'actor_rollout_ref.actor.use_dynamic_bsz=True', 'actor_rollout_ref.actor.ppo_max_token_len_per_gpu=32768', 'actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=True', 'actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=32768', 'actor_rollout_ref.rollout.tensor_model_parallel_size=1', 'actor_rollout_ref.rollout.gpu_memory_utilization=0.6', 'actor_rollout_ref.rollout.n=2', 'actor_rollout_ref.rollout.max_num_batched_tokens=131072', 'actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True', 'actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=32768', 'actor_rollout_ref.ref.entropy_from_logits_with_chunking=True', 'actor_rollout_ref.ref.strategy=fsdp2', 'actor_rollout_ref.actor.strategy=fsdp2', 'critic.strategy=fsdp2', 'reward_model.strategy=fsdp2', 'trainer.logger=[console,tensorboard]', 'trainer.project_name=bfcl_multi_turn_grpo', 'trainer.experiment_name=Qwen3-0.6B-Instruct-format-stage1-new-env-enhanced_test_new_code_bfcl_multi_turn_rl_2026-03-13_21-02-07', 'trainer.rollout_data_dir=/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/*/rollout/bfcl_multi_turn_grpo/Qwen3-0.6B-Instruct-format-stage1-new-env-enhanced_test_new_code_bfcl_multi_turn_rl_2026-03-13_21-02-07', 'trainer.default_local_dir=/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/*/models/checkpoints/bfcl_multi_turn_grpo/Qwen3-0.6B-Instruct-format-stage1-new-env-enhanced_test_new_code_bfcl_multi_turn_rl_2026-03-13_21-02-07', 'trainer.n_gpus_per_node=2', 'trainer.nnodes=1', 'trainer.save_freq=5', 'trainer.test_freq=10', 'trainer.val_before_train=False', 'trainer.total_epochs=20']
+Traceback (most recent call last):
+  File "/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/verl/verl/trainer/main_ppo.py", line 31, in main
+    run_ppo(config)
+  File "/mnt/whuscs/ckf/Tool-MT/EnvTuningProject/verl/verl/trainer/main_ppo.py", line 54, in run_ppo
+    ray.get(runner.run.remote(config))
+  File "/mnt/whuscs/ckf/env/envtuning/lib/python3.10/site-packages/ray/_private/auto_init_hook.py", line 21, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/mnt/whuscs/ckf/env/envtuning/lib/python3.10/site-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/mnt/whuscs/ckf/env/envtuning/lib/python3.10/site-packages/ray/_private/worker.py", line 2822, in get
+    values, debugger_breakpoint = worker.get_objects(object_refs, timeout=timeout)
+  File "/mnt/whuscs/ckf/env/envtuning/lib/python3.10/site-packages/ray/_private/worker.py", line 932, in get_objects
+    raise value
+ray.exceptions.ActorDiedError: The actor died unexpectedly before finishing this task.
+	class_name: TaskRunner
+	actor_id: d5df9dfebba61a6ffd70ee9801000000
+	namespace: 66c0f4f2-4e50-4a5b-bd4b-0b098e3969a2
+The actor is dead because its owner has died. Owner Id: 01000000ffffffffffffffffffffffffffffffffffffffffffffffff Owner Ip address: 172.29.7.38 Owner worker exit type: SYSTEM_ERROR Worker exit detail: Owner's node has crashed.
+The actor never ran - it was cancelled before it started running.
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
